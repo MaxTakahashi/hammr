@@ -381,7 +381,7 @@ class Template(Cmd, CoreGlobal):
                         format_type = builder["type"]
                         targetFormat = generate_utils.get_target_format_object(self.api, self.login, format_type)
                         if targetFormat is None:
-                            printer.out("Builder type unknown: "+format_type, printer.ERROR)
+                            printer.out("Builder type unknown: "+format_type+", Please check access rights to the format.", printer.ERROR)
                             return 2
 
                         myimage = image()
@@ -400,7 +400,7 @@ class Template(Cmd, CoreGlobal):
                         if func:
                             myimage,myinstallProfile = func(myimage, builder, myinstallProfile, self.api, self.login)
                         else:
-                            printer.out("Builder type unknown: "+format_type, printer.ERROR)
+                            printer.out("Builder type unknown: "+format_type+" is not supported.", printer.ERROR)
                             return 2
 
 

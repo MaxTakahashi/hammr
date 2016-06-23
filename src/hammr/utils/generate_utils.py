@@ -380,6 +380,6 @@ def get_target_format_object(api, login, targetFormatName):
         return None
     else:
         for item in targetFormatsUser.targetFormats.targetFormat:
-            if (item.name == targetFormatName):
+            if (item.format.name == targetFormatName):
                 return item
     return None
