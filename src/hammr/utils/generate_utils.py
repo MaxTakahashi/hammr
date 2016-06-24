@@ -169,37 +169,12 @@ def generate_azure(image, builder, installProfile, api, login):
 
 
 def generate_aws(image, builder, installProfile, api, login):
-    if "ebs" in builder and builder["ebs"] == "true":
-        image.ebs = True
-        if "diskSize" in builder["installation"]:
-            image.ebsVolumeSize = builder["installation"]["diskSize"]
-        else:
-            printer.out("No disksize set for ebs volume in builder [aws]", printer.ERROR)
-            return None, None
+    image.ebs = True
+    if "diskSize" in builder["installation"]:
+        image.ebsVolumeSize = builder["installation"]["diskSize"]
     else:
-        image.ebs = False
-
-    if "account" in builder and builder["account"] is not None:
-        if not "name" in builder["account"]:
-            printer.out("Account name not found in builder", printer.ERROR)
-            return None, None
-
-        accounts = api.Users(login).Accounts.Getall().credAccounts.credAccount
-        if accounts is None or len(accounts) == 0:
-            printer.out("No accounts available", printer.ERROR)
-            return None, None
-
-        for account in accounts:
-            if account.name == builder["account"]["name"]:
-                image.credAccount = account
-                break
-        if image.credAccount is None:
-            printer.out("Account not found: "+builder["account"]["name"], printer.ERROR)
-            return None, None
-    else:
-        if not image.ebs:
-            printer.out("Account not found in builder", printer.ERROR)
-            return None, None
+        printer.out("No disksize set for ebs volume in builder [aws]", printer.ERROR)
+        return None, None
 
     if "disableRootLogin" in builder:
         myrootUser = osUser()
