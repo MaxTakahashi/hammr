@@ -149,15 +149,9 @@ class Image(Cmd, CoreGlobal):
                     if not self.is_image_ready_to_publish(image, None):
                         printer.out("Image with name '" + image.name + " can not be published", printer.ERROR)
                         return 2
-                    appliance = self.api.Users(self.login).Appliances(
-                        generics_utils.extract_id(image.applianceUri)).Get()
+                    appliance = self.get_image_parent_api(image).Get()
                     if appliance is None or not hasattr(appliance, 'dbId'):
-                        printer.out("No template found for image", printer.ERROR)
-                        return
-                    rInstallProfile = self.api.Users(self.login).Appliances(appliance.dbId).Installprofile("").Get()
-                    if rInstallProfile is None:
-                        printer.out("No installation found on the template '" + template["stack"]["name"] + "'",
-                                    printer.ERROR)
+                        printer.out("No template nor scan found for image", printer.ERROR)
                         return
                     builder = self.find_builder(image, template)
                     if builder is None:
@@ -165,7 +159,7 @@ class Image(Cmd, CoreGlobal):
                         printer.out("No builder part found for image with format type: " + str(template["type"]),
                                     printer.ERROR)
                         return 2
-                    self.publish_builder(builder, template, appliance, rInstallProfile, 1, image)
+                    self.publish_builder(builder, template, appliance, 1, image)
                 else:
                     # Get template which correpond to the template file
                     appliances = self.api.Users(self.login).Appliances().Getall(
@@ -176,15 +170,10 @@ class Image(Cmd, CoreGlobal):
                         printer.out("No template found on the plateform", printer.ERROR)
                         return 0
                     appliance = appliance[0]
-                    rInstallProfile = self.api.Users(self.login).Appliances(appliance.dbId).Installprofile("").Get()
-                    if rInstallProfile is None:
-                        printer.out("No installation found on the template '" + template["stack"]["name"] + "'",
-                                    printer.ERROR)
-                        return
 
                     i = 1
                     for builder in template["builders"]:
-                        rCode = self.publish_builder(builder, template, appliance, rInstallProfile, i, None)
+                        rCode = self.publish_builder(builder, template, appliance, i, None)
                         if rCode >= 2:
                             return
                         i += 1
@@ -308,8 +297,7 @@ class Image(Cmd, CoreGlobal):
                     print table.draw() + "\n"
                     if generics_utils.query_yes_no(
                                     "Do you really want to delete image with id " + str(deleteImage.dbId)):
-                        self.api.Users(self.login).Appliances(
-                            generics_utils.extract_id(deleteImage.applianceUri)).Images(deleteImage.dbId).Delete()
+                        self.get_image_api(deleteImage).Delete()
                         printer.out("Image deleted", printer.OK)
                 else:
                     printer.out("Image not found", printer.ERROR)
@@ -366,9 +354,7 @@ class Image(Cmd, CoreGlobal):
                 if cancelImage is not None:
                     if generics_utils.query_yes_no(
                                     "Do you really want to cancel image with id " + str(cancelImage.dbId)):
-                        self.api.Users(self.login).Appliances(
-                            generics_utils.extract_id(cancelImage.applianceUri)).Images(
-                            cancelImage.dbId).Status.Cancel()
+                        self.get_image_api(cancelImage).Status.Cancel()
                         printer.out("Image Canceled", printer.OK)
                 else:
                     printer.out("Image not found", printer.ERROR)
@@ -463,7 +449,7 @@ class Image(Cmd, CoreGlobal):
             pubStatus = "In progress (" + str(status.percentage) + "%)"
         return pubStatus
 
-    def publish_builder(self, builder, template, appliance, rInstallProfile, i, comliantImage):
+    def publish_builder(self, builder, template, appliance, i, comliantImage):
         try:
             if comliantImage is None:
                 comliantImage = self.get_image_to_publish(builder, template, appliance, i)
@@ -484,9 +470,7 @@ class Image(Cmd, CoreGlobal):
             mypImage.credAccount = self.get_account_to_publish(builder)
             account_name = mypImage.credAccount.name
 
-            rpImage = self.api.Users(self.login).Appliances(appliance.dbId).Images(
-                comliantImage.dbId).Pimages().Publish(body=mypImage, element_name="ns1:publishImage")
-
+            rpImage = self.get_image_api(comliantImage).Pimages().Publish(body=mypImage, element_name="ns1:publishImage")
             status = rpImage.status
             statusWidget = progressbar_widget.Status()
             statusWidget.status = status
@@ -495,8 +479,7 @@ class Image(Cmd, CoreGlobal):
             while not (status.complete or status.error or status.cancelled):
                 statusWidget.status = status
                 progress.update(status.percentage)
-                status = self.api.Users(self.login).Appliances(appliance.dbId).Images(comliantImage.dbId).Pimages(
-                    rpImage.dbId).Status.Get()
+                status = self.get_image_api(comliantImage).Pimages(rpImage.dbId).Status.Get()
                 time.sleep(2)
             statusWidget.status = status
             progress.finish()
@@ -510,8 +493,7 @@ class Image(Cmd, CoreGlobal):
                     "name"] + "' canceled: " + status.message.printer.WARNING)
             else:
                 printer.out("Publication to " + account_name + " is ok", printer.OK)
-                rpImage = self.api.Users(self.login).Appliances(appliance.dbId).Images(comliantImage.dbId).Pimages(
-                    rpImage.dbId).Get()
+                rpImage = self.get_image_api(comliantImage).Pimages(rpImage.dbId).Get()
                 if rpImage.cloudId is not None and rpImage.cloudId != "":
                     printer.out("Cloud ID : " + rpImage.cloudId)
             return 0
@@ -520,8 +502,7 @@ class Image(Cmd, CoreGlobal):
             if generics_utils.query_yes_no("Do you want to cancel the job ?"):
                 if 'appliance' in locals() and 'comliantImage' in locals() and 'rpImage' in locals() \
                         and hasattr(appliance, 'dbId') and hasattr(comliantImage, 'dbId') and hasattr(rpImage, 'dbId'):
-                    self.api.Users(self.login).Appliances(appliance.dbId).Images(comliantImage.dbId).Pimages(
-                        rpImage.dbId).Cancel.Cancel()
+                    self.get_image_api(comliantImage).Pimages(rpImage.dbId).Cancel.Cancel()
                 else:
                     printer.out("Impossible to cancel", printer.WARNING)
             else:
@@ -721,3 +702,24 @@ class Image(Cmd, CoreGlobal):
 
         status = show_deploy_progress_without_percentage(self, deployed_instance_id)
         return print_deploy_info(self, status, deployed_instance_id)
+
+    def get_image_parent_api(self, imageObj):
+        if imageObj.applianceUri.find('/appliances/') >= 0:
+            return self.api.Users(self.login)\
+                .Appliances(generics_utils.extract_id(imageObj.applianceUri))
+        elif imageObj.applianceUri.find('/scans/') >= 0:
+            # when generate from scan, appliance_uri is "users/root/scannedinstances/<ScannedInstance>/scans/<Scan>"
+            elements = imageObj.applianceUri.split("/")
+            return self.api.Users(self.login)\
+                .Scannedinstances(elements[len(elements) - 3])\
+                .Scans(elements[len(elements) - 1])
+        else:
+            raise ValueError("Cannot get parent object from URI.")
+
+    def get_image_api(self, imageObj):
+        if imageObj.applianceUri.find('/appliances/') >= 0:
+            return self.get_image_parent_api(imageObj).Images(Itid=imageObj.dbId)
+        elif imageObj.applianceUri.find('/scans/') >= 0:
+            return self.get_image_parent_api(imageObj).Images(Sitid=imageObj.dbId, Itid=imageObj.dbId)
+        else:
+            raise ValueError("Cannot get parent object from URI.")
